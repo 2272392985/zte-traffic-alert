@@ -326,186 +326,195 @@ function App() {
 
   return (
     <main className="app-shell">
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">ZTE Traffic Alert</p>
-          <h1>中兴随身 WiFi 流量提醒</h1>
-        </div>
-        <div className={`status-pill ${monitoring ? "online" : ""}`}>
-          <Activity size={16} />
-          {monitoring ? "监控运行中" : "监控未启动"}
-        </div>
-      </header>
+      <div className="content-scroll">
+        <header className="topbar">
+          <div>
+            <p className="eyebrow">ZTE Traffic Alert</p>
+            <h1>中兴随身 WiFi 流量提醒</h1>
+          </div>
+          <div className={`status-pill ${monitoring ? "online" : ""}`}>
+            <Activity size={16} />
+            {monitoring ? "监控运行中" : "监控未启动"}
+          </div>
+        </header>
 
-      <section className="dashboard">
-        <div className="metric primary">
-          <div className="metric-title">
-            <Gauge size={18} />
-            剩余流量
+        <section className="dashboard">
+          <div className="metric primary">
+            <div className="metric-title">
+              <Gauge size={18} />
+              剩余流量
+            </div>
+            <strong>{formatTraffic(status.remaining_bytes)}</strong>
+            <span>阈值 {config.traffic.disconnect_when_remaining_gb_lte} GB</span>
           </div>
-          <strong>{formatTraffic(status.remaining_bytes)}</strong>
-          <span>阈值 {config.traffic.disconnect_when_remaining_gb_lte} GB</span>
-        </div>
-        <div className="metric">
-          <div className="metric-title">
-            <Wifi size={18} />
-            已用流量
+          <div className="metric">
+            <div className="metric-title">
+              <Wifi size={18} />
+              已用流量
+            </div>
+            <strong>{formatTraffic(status.used_bytes)}</strong>
+            <span>套餐 {config.traffic.plan_gb} GB</span>
           </div>
-          <strong>{formatTraffic(status.used_bytes)}</strong>
-          <span>套餐 {config.traffic.plan_gb} GB</span>
-        </div>
-        <div className="metric">
-          <div className="metric-title">
-            <ShieldCheck size={18} />
-            动作状态
+          <div className="metric">
+            <div className="metric-title">
+              <ShieldCheck size={18} />
+              动作状态
+            </div>
+            <strong>{status.triggered ? "已触发" : "正常"}</strong>
+            <span>{status.action || "未执行"}</span>
           </div>
-          <strong>{status.triggered ? "已触发" : "正常"}</strong>
-          <span>{status.action || "未执行"}</span>
-        </div>
-      </section>
+        </section>
 
-      <section className="progress-panel">
-        <div className="progress-header">
-          <span>本月流量使用进度</span>
-          <b>{usedPercent.toFixed(1)}%</b>
-        </div>
-        <div className="traffic-bar">
-          <div style={{ width: `${usedPercent}%` }} />
-        </div>
-        <div className="progress-footer">
-          <span>RX: {status.rx_field || "-"}</span>
-          <span>TX: {status.tx_field || "-"}</span>
-          <span>{status.checked_at || "尚未检查"}</span>
-        </div>
-      </section>
-
-      <section className="workspace">
-        <div className="panel">
-          <div className="panel-title">
-            <Settings size={18} />
-            连接与套餐
+        <section className="progress-panel">
+          <div className="progress-header">
+            <span>本月流量使用进度</span>
+            <b>{usedPercent.toFixed(1)}%</b>
           </div>
-          <label>
-            路由器地址
-            <input
-              value={config.router.base_url}
-              onChange={(event) =>
-                updateConfig((draft) => {
-                  draft.router.base_url = event.target.value;
-                })
-              }
-            />
-          </label>
-          <label>
-            后台密码
-            <input
-              type="password"
-              value={config.router.admin_password}
-              onChange={(event) =>
-                updateConfig((draft) => {
-                  draft.router.admin_password = event.target.value;
-                })
-              }
-            />
-          </label>
-          <div className="grid-two">
+          <div className="traffic-bar">
+            <div style={{ width: `${usedPercent}%` }} />
+          </div>
+          <div className="progress-footer">
+            <span>RX: {status.rx_field || "-"}</span>
+            <span>TX: {status.tx_field || "-"}</span>
+            <span>{status.checked_at || "尚未检查"}</span>
+          </div>
+        </section>
+
+        <section className="workspace">
+          <div className="panel">
+            <div className="panel-title">
+              <Settings size={18} />
+              连接与套餐
+            </div>
             <label>
-              套餐总量
+              路由器地址
               <input
-                type="number"
-                min="1"
-                value={config.traffic.plan_gb}
+                value={config.router.base_url}
                 onChange={(event) =>
                   updateConfig((draft) => {
-                    draft.traffic.plan_gb = Number(event.target.value);
+                    draft.router.base_url = event.target.value;
                   })
                 }
               />
             </label>
             <label>
-              断网阈值
+              后台密码
               <input
-                type="number"
-                min="0"
-                step="0.1"
-                value={config.traffic.disconnect_when_remaining_gb_lte}
+                type="password"
+                value={config.router.admin_password}
                 onChange={(event) =>
                   updateConfig((draft) => {
-                    draft.traffic.disconnect_when_remaining_gb_lte = Number(event.target.value);
+                    draft.router.admin_password = event.target.value;
                   })
                 }
               />
             </label>
+            <div className="grid-two">
+              <label>
+                套餐总量
+                <input
+                  type="number"
+                  min="1"
+                  value={config.traffic.plan_gb}
+                  onChange={(event) =>
+                    updateConfig((draft) => {
+                      draft.traffic.plan_gb = Number(event.target.value);
+                    })
+                  }
+                />
+              </label>
+              <label>
+                断网阈值
+                <input
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={config.traffic.disconnect_when_remaining_gb_lte}
+                  onChange={(event) =>
+                    updateConfig((draft) => {
+                      draft.traffic.disconnect_when_remaining_gb_lte = Number(event.target.value);
+                    })
+                  }
+                />
+              </label>
+            </div>
           </div>
-        </div>
 
-        <div className="panel">
-          <div className="panel-title">
-            <Bell size={18} />
-            监控动作
+          <div className="panel">
+            <div className="panel-title">
+              <Bell size={18} />
+              监控动作
+            </div>
+            <label>
+              动作模式
+              <select
+                value={config.action.mode}
+                onChange={(event) =>
+                  updateConfig((draft) => {
+                    draft.action.mode = event.target.value as ActionMode;
+                  })
+                }
+              >
+                <option value="dry_run">dry_run</option>
+                <option value="router_disconnect">router_disconnect</option>
+              </select>
+            </label>
+            <label>
+              轮询间隔
+              <input
+                type="number"
+                min="10"
+                value={config.service.poll_interval_seconds}
+                onChange={(event) =>
+                  updateConfig((draft) => {
+                    draft.service.poll_interval_seconds = Number(event.target.value);
+                  })
+                }
+              />
+            </label>
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={config.action.repeat_disconnect}
+                onChange={(event) =>
+                  updateConfig((draft) => {
+                    draft.action.repeat_disconnect = event.target.checked;
+                  })
+                }
+              />
+              触发后允许重复断网
+            </label>
           </div>
-          <label>
-            动作模式
-            <select
-              value={config.action.mode}
-              onChange={(event) =>
-                updateConfig((draft) => {
-                  draft.action.mode = event.target.value as ActionMode;
-                })
-              }
-            >
-              <option value="dry_run">dry_run</option>
-              <option value="router_disconnect">router_disconnect</option>
-            </select>
-          </label>
-          <label>
-            轮询间隔
-            <input
-              type="number"
-              min="10"
-              value={config.service.poll_interval_seconds}
-              onChange={(event) =>
-                updateConfig((draft) => {
-                  draft.service.poll_interval_seconds = Number(event.target.value);
-                })
-              }
-            />
-          </label>
-          <label className="checkbox-row">
-            <input
-              type="checkbox"
-              checked={config.action.repeat_disconnect}
-              onChange={(event) =>
-                updateConfig((draft) => {
-                  draft.action.repeat_disconnect = event.target.checked;
-                })
-              }
-            />
-            触发后允许重复断网
-          </label>
-        </div>
-      </section>
+        </section>
+      </div>
 
       <footer className="command-bar">
-        <button onClick={() => void saveConfig()} disabled={busy}>
-          <Save size={17} />
-          保存配置
-        </button>
-        <button onClick={() => void refreshTraffic()} disabled={busy}>
-          <RefreshCw size={17} />
-          刷新流量
-        </button>
-        <button onClick={() => void toggleMonitor()} disabled={busy}>
-          {monitoring ? <CircleStop size={17} /> : <Power size={17} />}
-          {monitoring ? "停止监控" : "启动监控"}
-        </button>
-        <button className="danger" onClick={() => void disconnectNow()} disabled={busy}>
-          <PlugZap size={17} />
-          测试断网
-        </button>
-        <div className="message">
+        <div className={`message ${message.includes("失败") ? "error" : ""}`}>
           {status.triggered ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />}
           {message}
+        </div>
+        <div className="actions">
+          <button onClick={() => void saveConfig()} disabled={busy} title="保存配置">
+            <Save size={17} />
+            <span>保存配置</span>
+          </button>
+          <button onClick={() => void refreshTraffic()} disabled={busy} title="刷新流量">
+            <RefreshCw size={17} />
+            <span>刷新流量</span>
+          </button>
+          <button onClick={() => void toggleMonitor()} disabled={busy} title="启动或停止监控">
+            {monitoring ? <CircleStop size={17} /> : <Power size={17} />}
+            <span>{monitoring ? "停止监控" : "启动监控"}</span>
+          </button>
+          <button
+            className="danger"
+            onClick={() => void disconnectNow()}
+            disabled={busy}
+            title="测试断网"
+          >
+            <PlugZap size={17} />
+            <span>测试断网</span>
+          </button>
         </div>
       </footer>
     </main>

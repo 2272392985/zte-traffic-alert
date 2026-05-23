@@ -16,6 +16,7 @@ body {
   margin: 0;
   min-width: 900px;
   min-height: 680px;
+  overflow: hidden;
 }
 
 button,
@@ -25,11 +26,20 @@ select {
 }
 
 .app-shell {
-  min-height: 100vh;
-  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(237, 244, 247, 0.92)),
     #edf4f7;
+  overflow: hidden;
+}
+
+.content-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 28px 28px 18px;
 }
 
 .loading {
@@ -228,10 +238,24 @@ select:focus {
 }
 
 .command-bar {
-  display: flex;
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
-  margin-top: 16px;
+  min-height: 76px;
+  padding: 10px 28px;
+  background: rgba(237, 244, 247, 0.94);
+  border-top: 1px solid #d6e2e8;
+  box-shadow: 0 -10px 24px rgba(35, 58, 75, 0.06);
+  backdrop-filter: blur(16px);
+}
+
+.actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
 }
 
 button {
@@ -239,13 +263,26 @@ button {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  height: 40px;
-  padding: 0 13px;
+  flex: 0 0 auto;
+  min-width: 112px;
+  height: 44px;
+  padding: 0 14px;
   color: #17202a;
   background: #ffffff;
   border: 1px solid #cfdce3;
   border-radius: 7px;
   cursor: pointer;
+  white-space: nowrap;
+}
+
+button svg {
+  flex: 0 0 auto;
+}
+
+button span {
+  display: inline-block;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 button:hover {
@@ -265,11 +302,28 @@ button.danger {
 
 .message {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   min-width: 0;
-  margin-left: auto;
+  max-height: 44px;
+  padding: 8px 10px;
   color: #52626f;
+  background: #ffffff;
+  border: 1px solid #d7e3e9;
+  border-radius: 7px;
+  overflow: hidden;
+  line-height: 1.35;
+}
+
+.message svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.message.error {
+  color: #9a3412;
+  background: #fff7ed;
+  border-color: #fed7aa;
 }
 
 @keyframes spin {

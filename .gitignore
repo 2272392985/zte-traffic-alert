@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+
+.DS_Store
+
+config.json
+zte_traffic_alert_state.json
+zte_traffic_alert.log
+launchd.out.log
+launchd.err.log

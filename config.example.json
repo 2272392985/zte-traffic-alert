@@ -1,0 +1,29 @@
+{
+  "router": {
+    "base_url": "http://192.168.0.1",
+    "admin_password": "",
+    "request_timeout_seconds": 8,
+    "disconnect_goform_ids": [
+      "DISCONNECT_NETWORK",
+      "DISCONNECT"
+    ]
+  },
+  "traffic": {
+    "plan_gb": 100,
+    "unit": "GiB",
+    "disconnect_when_remaining_gb_lte": 2,
+    "rx_field": "",
+    "tx_field": "",
+    "counter_mode": "monthly"
+  },
+  "service": {
+    "poll_interval_seconds": 300,
+    "state_path": "zte_traffic_alert_state.json",
+    "log_path": "zte_traffic_alert.log"
+  },
+  "action": {
+    "mode": "dry_run",
+    "repeat_disconnect": false,
+    "local_command": []
+  }
+}

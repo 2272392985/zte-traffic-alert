@@ -8,3 +8,8 @@ zte_traffic_alert_state.json
 zte_traffic_alert.log
 launchd.out.log
 launchd.err.log
+
+.venv-build/
+build/
+dist/
+*.spec

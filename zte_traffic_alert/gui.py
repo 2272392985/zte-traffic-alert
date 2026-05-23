@@ -2,14 +2,17 @@ from __future__ import annotations
 
 from datetime import datetime
 import json
+import os
 from pathlib import Path
 import platform
 import subprocess
+import sys
 import threading
 import tkinter as tk
 from tkinter import messagebox, ttk
 from typing import Callable
 
+from .app_paths import default_gui_config_path
 from .config import (
     ActionConfig,
     AppConfig,
@@ -321,6 +324,10 @@ class TrafficAlertGui:
 
     def install_autostart(self) -> None:
         system = platform.system()
+        if getattr(sys, "frozen", False):
+            self._install_packaged_autostart(system)
+            return
+
         project_dir = Path(__file__).resolve().parents[1]
         if system == "Darwin":
             command = [str(project_dir / "scripts" / "install_macos.sh")]
@@ -350,6 +357,81 @@ class TrafficAlertGui:
             self.status_text.set(result)
 
         self._run_background("正在安装开机自启...", work, done)
+
+    def _install_packaged_autostart(self, system: str) -> None:
+        app_path = Path(sys.executable)
+        config_dir = default_gui_config_path().parent
+
+        if system == "Darwin":
+            plist_path = Path.home() / "Library" / "LaunchAgents" / (
+                "com.local.zte-traffic-alert-gui.plist"
+            )
+
+            def work():
+                plist_path.parent.mkdir(parents=True, exist_ok=True)
+                plist_path.write_text(
+                    f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.local.zte-traffic-alert-gui</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>{app_path}</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>{config_dir / "autostart.out.log"}</string>
+  <key>StandardErrorPath</key>
+  <string>{config_dir / "autostart.err.log"}</string>
+</dict>
+</plist>
+""",
+                    encoding="utf-8",
+                )
+                subprocess.run(
+                    ["launchctl", "bootout", f"gui/{os.getuid()}", str(plist_path)],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                subprocess.run(
+                    ["launchctl", "bootstrap", f"gui/{os.getuid()}", str(plist_path)],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                return f"已安装开机自启：{plist_path}"
+
+        elif system == "Windows":
+
+            def work():
+                command = f'"{app_path}"'
+                subprocess.run(
+                    [
+                        "schtasks.exe",
+                        "/Create",
+                        "/TN",
+                        "ZTE Traffic Alert",
+                        "/TR",
+                        command,
+                        "/SC",
+                        "ONLOGON",
+                        "/F",
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                return "已安装开机自启：ZTE Traffic Alert"
+
+        else:
+            messagebox.showinfo("暂不支持", f"当前系统暂不支持自动安装：{system}")
+            return
+
+        self._run_background("正在安装开机自启...", work, self.status_text.set)
 
     def _run_background(
         self,

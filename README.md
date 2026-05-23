@@ -87,6 +87,57 @@ python3 -m zte_traffic_alert --config config.json gui
 - 测试断网接口。
 - 安装开机自启。
 
+## 打包应用
+
+打包依赖 PyInstaller。脚本会自动创建 `.venv-build` 并安装打包依赖。
+
+macOS 生成 `.app`：
+
+```bash
+chmod +x scripts/build_macos_app.sh
+scripts/build_macos_app.sh
+```
+
+产物：
+
+```text
+dist/ZTE Traffic Alert.app
+```
+
+Windows 生成 `.exe`：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build_windows_exe.ps1
+```
+
+产物：
+
+```text
+dist\ZTE Traffic Alert.exe
+```
+
+注意：PyInstaller 不能可靠跨平台交叉打包，macOS `.app` 需要在 macOS 上构建，Windows `.exe` 需要在 Windows 上构建。
+
+如果 pip 因证书或镜像问题无法安装 PyInstaller，可以传入额外参数：
+
+macOS：
+
+```bash
+PIP_EXTRA_ARGS="--trusted-host pypi.org --trusted-host files.pythonhosted.org" scripts/build_macos_app.sh
+```
+
+Windows：
+
+```powershell
+$env:PIP_EXTRA_ARGS="--trusted-host pypi.org --trusted-host files.pythonhosted.org"
+powershell -ExecutionPolicy Bypass -File .\scripts\build_windows_exe.ps1
+```
+
+打包后的 GUI 会在用户配置目录自动创建配置文件：
+
+- macOS：`~/Library/Application Support/ZTE Traffic Alert/config.json`
+- Windows：`%APPDATA%\ZTE Traffic Alert\config.json`
+
 ## macOS 安装为轻量服务
 
 ```bash

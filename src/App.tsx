@@ -13,7 +13,7 @@ import {
   ShieldCheck,
   Wifi,
 } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 type ActionMode = "dry_run" | "router_disconnect";
@@ -62,6 +62,78 @@ const emptyStatus: TrafficStatus = {
   checked_at: "",
 };
 
+const defaultConfig: AppConfig = {
+  router: {
+    base_url: "http://192.168.0.1",
+    admin_password: "",
+    request_timeout_seconds: 8,
+    disconnect_goform_ids: ["DISCONNECT_NETWORK", "DISCONNECT"],
+  },
+  traffic: {
+    plan_gb: 241,
+    unit: "GiB",
+    disconnect_when_remaining_gb_lte: 2,
+    rx_field: "",
+    tx_field: "",
+    counter_mode: "monthly",
+  },
+  service: {
+    poll_interval_seconds: 300,
+  },
+  action: {
+    mode: "dry_run",
+    repeat_disconnect: false,
+  },
+};
+
+declare global {
+  interface Window {
+    __TAURI_INTERNALS__?: unknown;
+  }
+}
+
+const isTauriRuntime = () => typeof window.__TAURI_INTERNALS__ !== "undefined";
+
+async function invokeCommand<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  if (isTauriRuntime()) {
+    return tauriInvoke<T>(command, args);
+  }
+
+  if (command === "load_config") {
+    const saved = window.localStorage.getItem("zte-traffic-alert-config");
+    return (saved ? JSON.parse(saved) : defaultConfig) as T;
+  }
+
+  if (command === "save_config") {
+    window.localStorage.setItem("zte-traffic-alert-config", JSON.stringify(args?.config));
+    return args?.config as T;
+  }
+
+  if (command === "check_traffic") {
+    const config = JSON.parse(
+      window.localStorage.getItem("zte-traffic-alert-config") || JSON.stringify(defaultConfig),
+    ) as AppConfig;
+    const usedBytes = 236.18 * 1024 ** 3;
+    const remainingBytes = Math.max(config.traffic.plan_gb * 1024 ** 3 - usedBytes, 0);
+    return {
+      used_bytes: usedBytes,
+      remaining_bytes: remainingBytes,
+      triggered:
+        remainingBytes <= config.traffic.disconnect_when_remaining_gb_lte * 1024 ** 3,
+      action: "",
+      rx_field: "monthly_rx_bytes",
+      tx_field: "monthly_tx_bytes",
+      checked_at: new Date().toLocaleString(),
+    } as T;
+  }
+
+  if (command === "disconnect_router") {
+    return "浏览器预览模式：未真正调用路由器断网接口" as T;
+  }
+
+  throw new Error(`浏览器预览模式不支持命令：${command}`);
+}
+
 function formatTraffic(bytes: number) {
   return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
 }
@@ -83,10 +155,10 @@ function App() {
   const usedPercent = 100 - remainingPercent;
 
   useEffect(() => {
-    invoke<AppConfig>("load_config")
+    invokeCommand<AppConfig>("load_config")
       .then((next) => {
         setConfig(next);
-        setMessage("配置已载入");
+        setMessage(isTauriRuntime() ? "配置已载入" : "浏览器预览模式");
       })
       .catch((error) => setMessage(String(error)));
   }, []);
@@ -111,7 +183,7 @@ function App() {
     if (!nextConfig) return;
     setBusy(true);
     try {
-      const saved = await invoke<AppConfig>("save_config", { config: nextConfig });
+      const saved = await invokeCommand<AppConfig>("save_config", { config: nextConfig });
       setConfig(saved);
       setMessage("配置已保存");
     } catch (error) {
@@ -125,9 +197,9 @@ function App() {
     if (!config) return;
     setBusy(true);
     try {
-      const saved = await invoke<AppConfig>("save_config", { config });
+      const saved = await invokeCommand<AppConfig>("save_config", { config });
       setConfig(saved);
-      const next = await invoke<TrafficStatus>("check_traffic");
+      const next = await invokeCommand<TrafficStatus>("check_traffic");
       setStatus(next);
       setMessage(next.triggered ? "已达到断网阈值" : "流量状态已刷新");
     } catch (error) {
@@ -141,7 +213,7 @@ function App() {
     if (!window.confirm("要立即调用随身 WiFi 的断网接口吗？")) return;
     setBusy(true);
     try {
-      const result = await invoke<string>("disconnect_router");
+      const result = await invokeCommand<string>("disconnect_router");
       setStatus((current) => ({ ...current, action: "router_disconnect" }));
       setMessage(result);
     } catch (error) {

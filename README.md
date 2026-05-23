@@ -70,6 +70,23 @@ python3 -m zte_traffic_alert --config config.json once
 python3 -m zte_traffic_alert --config config.json run
 ```
 
+## 桌面界面
+
+macOS 和 Windows 都可以直接打开同一个轻量界面：
+
+```bash
+python3 -m zte_traffic_alert --config config.json gui
+```
+
+界面里可以：
+
+- 查看当前已用/剩余流量。
+- 修改套餐总量和断网阈值。
+- 保存配置。
+- 启动或停止前台监控。
+- 测试断网接口。
+- 安装开机自启。
+
 ## macOS 安装为轻量服务
 
 ```bash

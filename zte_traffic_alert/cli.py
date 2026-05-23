@@ -17,6 +17,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("diagnose", help="Print raw traffic API values.")
     subparsers.add_parser("once", help="Run one check and exit.")
     subparsers.add_parser("run", help="Run forever until interrupted.")
+    subparsers.add_parser("gui", help="Open the desktop GUI.")
     return parser
 
 
@@ -40,6 +41,11 @@ def main(argv=None) -> int:
     if args.command == "run":
         return service.run_forever()
 
+    if args.command == "gui":
+        from .gui import run_gui
+
+        run_gui(args.config)
+        return 0
+
     print(f"Unknown command: {args.command}", file=sys.stderr)
     return 2
-

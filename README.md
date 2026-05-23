@@ -1,225 +1,139 @@
-# 中兴随身 WiFi 流量提醒/自动断网
+# 中兴随身 WiFi 流量提醒
 
-一个轻量化本地服务，用来定时读取中兴随身 WiFi 管理页的流量统计，并在套餐剩余流量低于指定阈值时自动执行动作。
+一个跨平台桌面应用，用来读取中兴随身 WiFi 管理接口的月流量统计，并在剩余流量低于阈值时提醒或自动断开蜂窝网络。
 
-默认路由器地址：
+默认设备页面：
 
 ```text
 http://192.168.0.1/index.html#traffic_alert
 ```
 
+## 当前架构
+
+新版主线已经重构为类似 cockpit-tools 的 Tauri 桌面应用：
+
+```text
+React + TypeScript + Vite 前端
+        ↓
+Tauri 2 invoke 命令
+        ↓
+Rust 原生后端
+        ↓
+中兴路由器 goform 接口
+```
+
+保留 `zte_traffic_alert/` 里的 Python 版本作为备用实现，但后续功能会优先放到 Tauri 版。
+
 ## 功能
 
-- 定时读取中兴 Web 管理接口的月流量统计。
-- 按「套餐总量 - 已用流量」计算剩余流量。
-- 剩余流量低于阈值时执行动作：
-  - `dry_run`：只记录日志，不断网。
-  - `router_disconnect`：调用路由器断开联网接口。
-  - `local_command`：执行你自定义的本机命令。
-- 支持 macOS `launchd` 常驻。
-- 支持 Windows 计划任务常驻。
-- 无第三方 Python 依赖。
+- 桌面仪表盘显示已用流量、剩余流量和触发状态。
+- 支持配置套餐总量和“剩余多少 GB 自动断网”。
+- 支持 `dry_run` 测试模式和 `router_disconnect` 真实断网模式。
+- 读取接口和断网接口均使用中兴 Web 管理后台的 `/goform` API。
+- macOS / Windows / Linux 可通过 Tauri 打包为原生桌面应用。
 
-## 快速开始
+## 开发运行
 
-1. 复制配置：
+先安装：
 
-```bash
-cp config.example.json config.json
-```
+- Node.js
+- Rust/Cargo
+- 平台原生构建工具：macOS 需要 Xcode Command Line Tools，Windows 需要 Microsoft C++ Build Tools/WebView2
 
-2. 修改 `config.json`：
-
-```json
-{
-  "traffic": {
-    "plan_gb": 241,
-    "disconnect_when_remaining_gb_lte": 2
-  },
-  "action": {
-    "mode": "dry_run"
-  }
-}
-```
-
-先保持 `dry_run`，确认读取结果正确后，再改成：
-
-```json
-{
-  "action": {
-    "mode": "router_disconnect"
-  }
-}
-```
-
-3. 诊断读取接口：
+然后运行：
 
 ```bash
-python3 -m zte_traffic_alert --config config.json diagnose
+npm install
+npm run tauri:dev
 ```
 
-4. 单次检查：
+只运行前端预览：
 
 ```bash
-python3 -m zte_traffic_alert --config config.json once
+npm run dev
 ```
 
-5. 前台常驻：
-
-```bash
-python3 -m zte_traffic_alert --config config.json run
-```
-
-## 桌面界面
-
-macOS 和 Windows 都可以直接打开同一个轻量界面：
-
-```bash
-python3 -m zte_traffic_alert --config config.json gui
-```
-
-界面里可以：
-
-- 查看当前已用/剩余流量。
-- 修改套餐总量和断网阈值。
-- 保存配置。
-- 启动或停止前台监控。
-- 测试断网接口。
-- 安装开机自启。
-
-## 打包应用
-
-打包依赖 PyInstaller。脚本会自动创建 `.venv-build` 并安装打包依赖。
-
-macOS 生成 `.app`：
-
-```bash
-chmod +x scripts/build_macos_app.sh
-scripts/build_macos_app.sh
-```
-
-产物：
-
-```text
-dist/ZTE Traffic Alert.app
-```
-
-Windows 生成 `.exe`：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\build_windows_exe.ps1
-```
-
-产物：
-
-```text
-dist\ZTE Traffic Alert.exe
-```
-
-注意：PyInstaller 不能可靠跨平台交叉打包，macOS `.app` 需要在 macOS 上构建，Windows `.exe` 需要在 Windows 上构建。
-
-如果 pip 因证书或镜像问题无法安装 PyInstaller，可以传入额外参数：
+## 打包
 
 macOS：
 
 ```bash
-PIP_EXTRA_ARGS="--trusted-host pypi.org --trusted-host files.pythonhosted.org" scripts/build_macos_app.sh
+scripts/build_tauri_macos.sh
+```
+
+产物目录：
+
+```text
+src-tauri/target/release/bundle
 ```
 
 Windows：
 
 ```powershell
-$env:PIP_EXTRA_ARGS="--trusted-host pypi.org --trusted-host files.pythonhosted.org"
+powershell -ExecutionPolicy Bypass -File .\scripts\build_tauri_windows.ps1
+```
+
+产物目录：
+
+```text
+src-tauri\target\release\bundle
+```
+
+注意：Tauri 一般不做可靠跨平台交叉打包。macOS 包请在 macOS 上构建，Windows 包请在 Windows 上构建。
+
+## 配置
+
+Tauri 版会在用户配置目录创建：
+
+```text
+ZTE Traffic Alert/config.json
+```
+
+默认配置核心字段：
+
+```json
+{
+  "router": {
+    "base_url": "http://192.168.0.1",
+    "admin_password": ""
+  },
+  "traffic": {
+    "plan_gb": 241,
+    "unit": "GiB",
+    "disconnect_when_remaining_gb_lte": 2
+  },
+  "action": {
+    "mode": "dry_run",
+    "repeat_disconnect": false
+  }
+}
+```
+
+`mode` 说明：
+
+- `dry_run`：只显示/记录触发状态，不断网。
+- `router_disconnect`：达到阈值后调用路由器断网接口。
+
+## 旧 Python 备用版
+
+命令行检查：
+
+```bash
+python3 -m zte_traffic_alert --config config.json once
+```
+
+Tkinter 旧界面：
+
+```bash
+python3 -m zte_traffic_alert --config config.json gui
+```
+
+PyInstaller 旧打包脚本仍保留：
+
+```bash
+scripts/build_macos_app.sh
+```
+
+```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\build_windows_exe.ps1
 ```
-
-打包后的 GUI 会在用户配置目录自动创建配置文件：
-
-- macOS：`~/Library/Application Support/ZTE Traffic Alert/config.json`
-- Windows：`%APPDATA%\ZTE Traffic Alert\config.json`
-
-## macOS 安装为轻量服务
-
-```bash
-chmod +x scripts/install_macos.sh scripts/uninstall_macos.sh
-scripts/install_macos.sh
-```
-
-卸载：
-
-```bash
-scripts/uninstall_macos.sh
-```
-
-日志默认写到项目目录的 `zte_traffic_alert.log`。
-
-## Windows 安装为计划任务
-
-在 PowerShell 中执行：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1
-```
-
-卸载：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\uninstall_windows.ps1
-```
-
-## 重要配置
-
-`router.base_url`
-
-路由器管理页地址，默认 `http://192.168.0.1`。
-
-`router.admin_password`
-
-如果你的设备调用断网接口需要登录，把后台管理密码填在这里。部分中兴设备不登录也可以读取流量，但断网通常需要登录。
-
-`traffic.plan_gb`
-
-套餐总流量。你的设备页面显示 `236.11GB / 241GB`，这里就填 `241`。
-
-`traffic.disconnect_when_remaining_gb_lte`
-
-剩余多少 GB 以内触发动作。例如填 `2` 表示剩余小于等于 2GB 时断网。
-
-`traffic.unit`
-
-计算单位。你的设备页面把 1024 进制显示成 `GB`，所以默认使用 `GiB`，这样程序结果会和页面上的 `236.11GB` 一致。
-
-`service.poll_interval_seconds`
-
-轮询间隔，默认 300 秒。
-
-`action.mode`
-
-动作模式。建议先用 `dry_run` 跑一天确认统计准确。
-
-`action.repeat_disconnect`
-
-默认 `false`，触发一次后不重复执行断网。新账期开始或手动删除 state 文件后可再次触发。
-
-## 如果诊断读取不到流量
-
-不同中兴固件的字段名可能略有不同。请打开：
-
-```text
-http://192.168.0.1/index.html#traffic_alert
-```
-
-然后在浏览器开发者工具的 Network 面板里刷新页面，查找请求：
-
-```text
-/goform/goform_get_cmd_process
-```
-
-把返回 JSON 里的流量字段名填到 `traffic.rx_field` 和 `traffic.tx_field`。
-
-常见字段：
-
-- `monthly_rx_bytes`
-- `monthly_tx_bytes`
-- `total_rx_bytes`
-- `total_tx_bytes`

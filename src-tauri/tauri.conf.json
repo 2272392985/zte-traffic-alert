@@ -1,0 +1,36 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ZTE Traffic Alert",
+  "version": "0.2.0",
+  "identifier": "com.staticmaple.zte-traffic-alert",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "中兴随身 WiFi 流量提醒",
+        "width": 1120,
+        "height": 760,
+        "minWidth": 900,
+        "minHeight": 680,
+        "center": true,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Utility",
+    "shortDescription": "中兴随身 WiFi 流量提醒",
+    "longDescription": "监控中兴随身 WiFi 本月流量，并在剩余流量低于阈值时自动断网。"
+  }
+}

@@ -10,6 +10,9 @@ launchd.out.log
 launchd.err.log
 
 .venv-build/
+node_modules/
 build/
 dist/
 *.spec
+src-tauri/target/
+src-tauri/gen/

@@ -14,6 +14,7 @@ import {
   Wifi,
 } from "lucide-react";
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 type ActionMode = "dry_run" | "router_disconnect";
@@ -50,6 +51,12 @@ type TrafficStatus = {
   rx_field: string;
   tx_field: string;
   checked_at: string;
+};
+
+type MonitorInfo = {
+  running: boolean;
+  last_status: TrafficStatus | null;
+  last_error: string;
 };
 
 const emptyStatus: TrafficStatus = {
@@ -131,6 +138,30 @@ async function invokeCommand<T>(command: string, args?: Record<string, unknown>)
     return "浏览器预览模式：未真正调用路由器断网接口" as T;
   }
 
+  if (command === "start_monitor") {
+    return {
+      running: true,
+      last_status: null,
+      last_error: "",
+    } as T;
+  }
+
+  if (command === "stop_monitor") {
+    return {
+      running: false,
+      last_status: null,
+      last_error: "",
+    } as T;
+  }
+
+  if (command === "monitor_status") {
+    return {
+      running: false,
+      last_status: null,
+      last_error: "",
+    } as T;
+  }
+
   throw new Error(`浏览器预览模式不支持命令：${command}`);
 }
 
@@ -164,13 +195,40 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!monitoring || !config) return;
+    if (!isTauriRuntime()) return;
+
+    let unlistenStatus: (() => void) | undefined;
+    let unlistenError: (() => void) | undefined;
+    void listen<TrafficStatus>("traffic-status", (event) => {
+      setStatus(event.payload);
+      setMessage(event.payload.triggered ? "后台监控已触发阈值" : "后台监控已刷新");
+    }).then((unlisten) => {
+      unlistenStatus = unlisten;
+    });
+    void listen<string>("traffic-error", (event) => {
+      setMessage(`后台监控失败：${event.payload}`);
+    }).then((unlisten) => {
+      unlistenError = unlisten;
+    });
+    void invokeCommand<MonitorInfo>("monitor_status").then((info) => {
+      setMonitoring(info.running);
+      if (info.last_status) setStatus(info.last_status);
+      if (info.last_error) setMessage(`后台监控失败：${info.last_error}`);
+    });
+
+    return () => {
+      unlistenStatus?.();
+      unlistenError?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isTauriRuntime() || !monitoring || !config) return;
 
     const interval = Math.max(config.service.poll_interval_seconds, 10) * 1000;
     timerRef.current = window.setInterval(() => {
       void refreshTraffic();
     }, interval);
-
     return () => {
       if (timerRef.current) {
         window.clearInterval(timerRef.current);
@@ -178,6 +236,31 @@ function App() {
       }
     };
   }, [monitoring, config]);
+
+  async function toggleMonitor() {
+    if (!config) return;
+    if (!isTauriRuntime()) {
+      setMonitoring((value) => !value);
+      setMessage(monitoring ? "浏览器预览监控已停止" : "浏览器预览监控已启动");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const saved = await invokeCommand<AppConfig>("save_config", { config });
+      setConfig(saved);
+      const info = await invokeCommand<MonitorInfo>(
+        monitoring ? "stop_monitor" : "start_monitor",
+      );
+      setMonitoring(info.running);
+      if (info.last_status) setStatus(info.last_status);
+      setMessage(info.running ? "后台监控已启动，可关闭窗口隐藏到托盘" : "后台监控已停止");
+    } catch (error) {
+      setMessage(`监控切换失败：${String(error)}`);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function saveConfig(nextConfig = config) {
     if (!nextConfig) return;
@@ -412,7 +495,7 @@ function App() {
           <RefreshCw size={17} />
           刷新流量
         </button>
-        <button onClick={() => setMonitoring((value) => !value)} disabled={busy}>
+        <button onClick={() => void toggleMonitor()} disabled={busy}>
           {monitoring ? <CircleStop size={17} /> : <Power size={17} />}
           {monitoring ? "停止监控" : "启动监控"}
         </button>

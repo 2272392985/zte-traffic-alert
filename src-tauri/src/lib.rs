@@ -6,8 +6,17 @@ use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Mutex,
+};
+use std::thread;
 use std::time::Duration;
-use tauri::Manager;
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{TrayIconBuilder, TrayIconEvent},
+    AppHandle, Emitter, Manager, State, WindowEvent,
+};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -79,6 +88,21 @@ struct TrafficStatus {
     rx_field: String,
     tx_field: String,
     checked_at: String,
+}
+
+#[derive(Default)]
+struct MonitorState {
+    running: AtomicBool,
+    threshold_triggered: AtomicBool,
+    last_status: Mutex<Option<TrafficStatus>>,
+    last_error: Mutex<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct MonitorInfo {
+    running: bool,
+    last_status: Option<TrafficStatus>,
+    last_error: String,
 }
 
 impl Default for AppConfig {
@@ -249,24 +273,13 @@ impl RouterClient {
         let quota = plan_bytes(traffic)?;
         let remaining = quota.saturating_sub(used);
         let threshold = threshold_bytes(traffic)?;
-        let mut action = String::new();
         let triggered = remaining <= threshold;
-
-        if triggered && traffic.disconnect_when_remaining_gb_lte >= 0.0 {
-            let app_config = load_config_from_disk()?;
-            if app_config.action.mode == "router_disconnect" {
-                self.disconnect()?;
-                action = "router_disconnect".to_string();
-            } else {
-                action = "dry_run".to_string();
-            }
-        }
 
         Ok(TrafficStatus {
             used_bytes: used,
             remaining_bytes: remaining,
             triggered,
-            action,
+            action: String::new(),
             rx_field,
             tx_field,
             checked_at: Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
@@ -305,9 +318,7 @@ fn save_config(config: AppConfig) -> Result<AppConfig, AppError> {
 
 #[tauri::command]
 fn check_traffic() -> Result<TrafficStatus, AppError> {
-    let config = load_config_from_disk()?;
-    let client = RouterClient::new(config.router)?;
-    client.get_traffic(&config.traffic)
+    run_check_once()
 }
 
 #[tauri::command]
@@ -317,8 +328,31 @@ fn disconnect_router() -> Result<String, AppError> {
     client.disconnect()
 }
 
+#[tauri::command]
+fn start_monitor(app: AppHandle, state: State<'_, MonitorState>) -> Result<MonitorInfo, AppError> {
+    if state.running.swap(true, Ordering::SeqCst) {
+        return monitor_info(&state);
+    }
+
+    let app_handle = app.clone();
+    thread::spawn(move || monitor_loop(app_handle));
+    monitor_info(&state)
+}
+
+#[tauri::command]
+fn stop_monitor(state: State<'_, MonitorState>) -> Result<MonitorInfo, AppError> {
+    state.running.store(false, Ordering::SeqCst);
+    monitor_info(&state)
+}
+
+#[tauri::command]
+fn monitor_status(state: State<'_, MonitorState>) -> Result<MonitorInfo, AppError> {
+    monitor_info(&state)
+}
+
 pub fn run() {
     tauri::Builder::default()
+        .manage(MonitorState::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -328,14 +362,142 @@ pub fn run() {
             load_config,
             save_config,
             check_traffic,
-            disconnect_router
+            disconnect_router,
+            start_monitor,
+            stop_monitor,
+            monitor_status
         ])
         .setup(|app| {
             let _ = app.path().app_config_dir();
+            setup_tray(app)?;
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
         })
         .run(tauri::generate_context!())
         .expect("error while running Tauri application");
+}
+
+fn setup_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    let show = MenuItem::with_id(app, "show", "显示窗口", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show, &quit])?;
+
+    TrayIconBuilder::with_id("main-tray")
+        .tooltip("中兴随身 WiFi 流量提醒")
+        .menu(&menu)
+        .show_menu_on_left_click(true)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "show" => show_main_window(app),
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if matches!(event, TrayIconEvent::DoubleClick { .. }) {
+                show_main_window(tray.app_handle());
+            }
+        })
+        .build(app)?;
+    Ok(())
+}
+
+fn show_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+fn monitor_loop(app: AppHandle) {
+    loop {
+        let state = app.state::<MonitorState>();
+        if !state.running.load(Ordering::SeqCst) {
+            break;
+        }
+
+        let interval_seconds = match run_monitor_check(&state) {
+            Ok(status) => {
+                if let Ok(mut last_status) = state.last_status.lock() {
+                    *last_status = Some(status.clone());
+                }
+                if let Ok(mut last_error) = state.last_error.lock() {
+                    last_error.clear();
+                }
+                let _ = app.emit("traffic-status", status);
+                load_config_from_disk()
+                    .map(|config| config.service.poll_interval_seconds)
+                    .unwrap_or(300)
+            }
+            Err(error) => {
+                let message = error.to_string();
+                if let Ok(mut last_error) = state.last_error.lock() {
+                    *last_error = message.clone();
+                }
+                let _ = app.emit("traffic-error", message);
+                60
+            }
+        };
+
+        for _ in 0..interval_seconds.max(10) {
+            if !state.running.load(Ordering::SeqCst) {
+                return;
+            }
+            thread::sleep(Duration::from_secs(1));
+        }
+    }
+}
+
+fn monitor_info(state: &MonitorState) -> Result<MonitorInfo, AppError> {
+    let last_status = state
+        .last_status
+        .lock()
+        .map_err(|_| AppError::Config("监控状态锁定失败".to_string()))?
+        .clone();
+    let last_error = state
+        .last_error
+        .lock()
+        .map_err(|_| AppError::Config("监控错误状态锁定失败".to_string()))?
+        .clone();
+    Ok(MonitorInfo {
+        running: state.running.load(Ordering::SeqCst),
+        last_status,
+        last_error,
+    })
+}
+
+fn run_check_once() -> Result<TrafficStatus, AppError> {
+    let config = load_config_from_disk()?;
+    let client = RouterClient::new(config.router)?;
+    client.get_traffic(&config.traffic)
+}
+
+fn run_monitor_check(state: &MonitorState) -> Result<TrafficStatus, AppError> {
+    let config = load_config_from_disk()?;
+    let client = RouterClient::new(config.router.clone())?;
+    let mut status = client.get_traffic(&config.traffic)?;
+
+    if !status.triggered {
+        state.threshold_triggered.store(false, Ordering::SeqCst);
+        return Ok(status);
+    }
+
+    let already_triggered = state.threshold_triggered.swap(true, Ordering::SeqCst);
+    if already_triggered && !config.action.repeat_disconnect {
+        status.action = "already_triggered".to_string();
+        return Ok(status);
+    }
+
+    if config.action.mode == "router_disconnect" {
+        client.disconnect()?;
+        status.action = "router_disconnect".to_string();
+    } else {
+        status.action = "dry_run".to_string();
+    }
+    Ok(status)
 }
 
 fn load_config_from_disk() -> Result<AppConfig, AppError> {
